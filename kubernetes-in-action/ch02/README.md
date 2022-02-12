@@ -170,3 +170,112 @@ $ docker push ${USER_NAME}/kubia
 ```bash
 $ docker run -p 8080:8080 -d ${USER_NAME}/kubia
 ```
+
+## Kubernetes
+
+### Kubernetes 클러스터 구동 확인
+
+클러스터가 작동중인지 확인
+
+```bash
+$ kubectl cluster-info
+Kubernetes master is running at https://kubernetes.docker.internal:6443
+CoreDNS is running at https://kubernetes.docker.internal:6443/api/v1/namespaces/kube-system/services/kube-dns:dns/proxy
+
+To further debug and diagnose cluster problems, use 'kubectl cluster-info dump'.
+```
+
+* 더 자세한 정보를 확인하기 위해서는 `dump` 옵션 추가
+
+클러스터의 노드 목록 확인
+
+```bash
+$ kubectl get nodes
+NAME             STATUS   ROLES                  AGE   VERSION
+docker-desktop   Ready    control-plane,master   16d   v1.21.5
+```
+
+노드 정보 확인
+
+```bash
+$ kubectl describe nodes ${NODE_NAME, e.g., docker-desktop}
+```
+
+* 노드 상태
+* CPU 및 메모리
+* 시스템 정보
+* 노드에서 실행 중인 컨테이너
+
+### 애플리케이션 배포
+
+```bash
+$ kubectl apply -f kubia.yaml
+replicationcontroller/kubia configured
+
+# deprecated 
+$ kubectl run kubia --image=luksa/kubia --port=8080 --generator=run/v1
+```
+
+* deprecated 명령어로 배포하면 `--generator=run/v1`이 동작하지 않고 `pod/kubia created` 메시지 출력
+
+### 확인
+
+#### Pod 확인
+
+```bash
+$ kubectl get pods 
+```
+
+Event 항목을 확인함으로써 Pod가 배포되는 과정을 확인 가능
+
+```bash
+$ kubectl describe pod
+...
+Events:
+  Type    Reason     Age        From                     Message
+  ----    ------     ----       ----                     -------
+  Normal  Scheduled  <unknown>                           Successfully assigned default/kubia-ljbpm to docker-desktop
+  Normal  Pulling    2m13s      kubelet, docker-desktop  Pulling image "luksa/kubia:latest"
+```
+
+#### Pod 액세스
+
+Pod에 액세스하기 위해서는, Pod에 존재하는 고유한 IP에 접근하도록 구성해야 한다. 이때 Loadbalancer 타입의 특수 서비스를 활용해 연결한다.
+
+```bash
+$ kubectl expose rc kubia --type=LoadBalancer --name kubia-http
+```
+
+```bash
+$ kubectl get services
+```
+
+```bash
+$ curl localhost:8080
+```
+
+#### Pod 복제본 수 증가
+
+```bash
+$ kubectl get replicationcontroller # or kubectl get rc
+
+$ kubectl scale rc kubia --replicas=3
+
+$ kubectl get replicationcontroller
+
+$ kubectl get pods
+
+$ curl localhost:8080
+```
+
+여기까지 실습을 진행하면 Kubernets의 다음 컴포넌트를 확인할 수 있다.
+
+* Pod
+  * 컨테이너가 실행되는 구성 요소
+  * 다수의 컨테이너 포함 가능
+* Service
+  * Pod는 컨테이너가 일시적으로 동작하는 공간으로 Pod가 새로 실행되면 IP 주소가 변경 될 수 있음
+  * 변경되는 IP 주소 문제를 보완하여 Pod가 호스트에 단일 고정 IP 및 Port로 노출될 수 있도록 함
+* Replication Controller
+  * Kubernetes 관리자는 `직접` Pod를 생성하지 않고, Replication Controller가 Pod 를 생성
+  * Pod가 사라지면 누락된 Pod를 대체할 새 Pod를 생성
